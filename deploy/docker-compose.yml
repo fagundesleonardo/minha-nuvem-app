@@ -1,0 +1,28 @@
+# Deploy target: the same Hostinger VPS as Nextcloud, but its own stack —
+# deliberately NOT added into /opt/minha-nuvem/docker-compose.yml, so a
+# mistake here can never take Nextcloud down (and vice versa).
+#
+# Usage on the VPS (first time):
+#   git clone https://github.com/fagundesleonardo/minha-nuvem-app.git /opt/minha-nuvem-app
+#   cp /opt/minha-nuvem-app/deploy/docker-compose.yml /opt/minha-nuvem-app/docker-compose.yml
+#   cp /opt/minha-nuvem-app/.env.example /opt/minha-nuvem-app/.env
+#   nano /opt/minha-nuvem-app/.env   # fill in the real secrets
+#   cd /opt/minha-nuvem-app && docker compose up -d --build
+#
+# To redeploy after a code change:
+#   cd /opt/minha-nuvem-app && git pull && docker compose up -d --build
+#
+# Nginx (see deploy/nginx-minha.sinmpla.com.br.conf) then reverse-proxies
+# https://minha.sinmpla.com.br -> 127.0.0.1:3001, the same pattern already
+# used for Nextcloud (nuvem.sinmpla.com.br -> 127.0.0.1:8080).
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: minha-nuvem-app:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3001:3000"

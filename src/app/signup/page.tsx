@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -17,16 +19,25 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { display_name: displayName || email } },
     });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
+    // "Confirm email" is off for this project, so signUp() already returns
+    // an active session — go straight in instead of telling the user to
+    // check an email that will never arrive. Only projects that still
+    // require confirmation land in the "check your email" state below.
+    if (data.session) {
+      router.push("/dashboard");
+      return;
+    }
+    setLoading(false);
     setDone(true);
   }
 

@@ -20,6 +20,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Compose auto-loads ./.env for ${...} substitution below (separate
+      # from the env_file: runtime injection further down) — these two
+      # NEXT_PUBLIC_* values get baked into the browser bundle at build
+      # time, so they must flow in here, not just via env_file.
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     image: minha-nuvem-app:latest
     restart: unless-stopped
     env_file:

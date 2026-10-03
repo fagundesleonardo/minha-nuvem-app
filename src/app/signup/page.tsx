@@ -35,6 +35,7 @@ export default function SignupPage() {
     // require confirmation land in the "check your email" state below.
     if (data.session) {
       router.push("/dashboard");
+      router.refresh();
       return;
     }
     setLoading(false);

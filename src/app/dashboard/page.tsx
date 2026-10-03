@@ -29,19 +29,33 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
 
   if (!user) {
+    console.error("[dashboard] getUser() returned no user", {
+      message: userError?.message,
+      status: userError?.status,
+      name: userError?.name,
+    });
     return <SessionIssue />;
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("id, email, display_name, role, quota_bytes, used_bytes")
     .eq("id", user.id)
     .single();
 
   if (!profile) {
+    console.error("[dashboard] profile lookup failed", {
+      userId: user.id,
+      userEmail: user.email,
+      message: profileError?.message,
+      code: profileError?.code,
+      details: profileError?.details,
+      hint: profileError?.hint,
+    });
     return <SessionIssue />;
   }
 

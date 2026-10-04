@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { LogoMark } from "@/components/Logo";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -59,6 +60,9 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
+          <div className="flex justify-center mb-3">
+            <LogoMark size={56} />
+          </div>
           <h1 className="text-2xl font-semibold text-slate-900">Minha Nuvem</h1>
           <p className="text-slate-500 mt-1">Crie sua conta</p>
         </div>

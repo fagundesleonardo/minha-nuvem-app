@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import Logo from "@/components/Logo";
 
 export default function Header({ isAdmin, section }: { isAdmin?: boolean; section?: "dashboard" | "admin" }) {
   const router = useRouter();
@@ -18,8 +19,8 @@ export default function Header({ isAdmin, section }: { isAdmin?: boolean; sectio
     <header className="border-b border-slate-200 bg-white">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <Link href="/dashboard" className="font-semibold text-slate-900">
-            ☁️ Minha Nuvem
+          <Link href="/dashboard">
+            <Logo size={26} />
           </Link>
           {isAdmin && (
             <nav className="flex gap-4 text-sm">

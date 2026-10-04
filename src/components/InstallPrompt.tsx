@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { uploadFile } from "@/lib/upload";
+import { isAutoSyncSupported, authorizeFolder, syncNow } from "@/lib/photoSync";
+import { LogoMark } from "@/components/Logo";
 
 const DISMISS_KEY = "minha-nuvem:install-dismissed-at";
 const DISMISS_DAYS = 7;
@@ -30,8 +34,34 @@ function isStandalone() {
   );
 }
 
+/** Uploads a batch of files picked via the plain <input type=file> fallback (used on iOS, where there's no folder-level authorization API) and records each as device_media — same bookkeeping the auto-sync path does. */
+async function uploadBatch(files: File[], onDone: (count: number) => void) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  let done = 0;
+  for (const file of files) {
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) continue;
+    const result = await uploadFile(file, null).catch(() => ({ ok: false as const, error: "falhou" }));
+    if (result.ok) {
+      await supabase.from("device_media").insert({
+        owner_id: user.id,
+        file_id: result.fileId,
+        media_type: file.type.startsWith("video/") ? "video" : "photo",
+        captured_at: file.lastModified ? new Date(file.lastModified).toISOString() : null,
+      });
+      done++;
+      onDone(done);
+    }
+  }
+}
+
 /**
- * Banner that helps people actually get the app installed on their phone.
+ * Banner that helps people actually get the app installed on their phone,
+ * then — once installed — offers one-tap photo/video auto-sync setup.
  *
  * Android/desktop Chrome fires `beforeinstallprompt` and we can trigger the
  * native install flow with one tap. iOS Safari never fires that event and
@@ -44,6 +74,10 @@ export default function InstallPrompt() {
   const [isIOS, setIsIOS] = useState(false);
   const [visible, setVisible] = useState(false);
   const [showIOSSteps, setShowIOSSteps] = useState(false);
+  const [askSync, setAskSync] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const fallbackInputRef = useRef<HTMLInputElement>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect --
      This whole effect only reads browser-only globals (navigator/window)
@@ -70,7 +104,8 @@ export default function InstallPrompt() {
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
 
     function onInstalled() {
-      setVisible(false);
+      setDeferredPrompt(null);
+      setAskSync(true); // keep the banner up one more step to offer photo/video auto-sync
     }
     window.addEventListener("appinstalled", onInstalled);
 
@@ -89,14 +124,46 @@ export default function InstallPrompt() {
     }
     setVisible(false);
     setShowIOSSteps(false);
+    setAskSync(false);
   }
 
   async function handleInstallClick() {
     if (!deferredPrompt) return;
     await deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
+    const { outcome } = await deferredPrompt.userChoice;
     setDeferredPrompt(null);
-    setVisible(false);
+    if (outcome === "accepted") {
+      setAskSync(true);
+    } else {
+      setVisible(false);
+    }
+  }
+
+  async function handleAuthorizeSync() {
+    if (isAutoSyncSupported()) {
+      setSyncBusy(true);
+      const handle = await authorizeFolder();
+      if (!handle) {
+        setSyncBusy(false);
+        return; // picker cancelled — leave the ask visible so they can retry
+      }
+      const result = await syncNow().catch(() => null);
+      setSyncBusy(false);
+      setSyncMessage(result ? `Pronto! ${result.uploaded} arquivo(s) sincronizados.` : "Autorizado — sincronizando em segundo plano.");
+      setTimeout(dismiss, 2500);
+    } else {
+      // iOS / browsers without folder access: best effort is the native multi-select picker.
+      fallbackInputRef.current?.click();
+    }
+  }
+
+  async function handleFallbackFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setSyncBusy(true);
+    await uploadBatch(Array.from(files), (count) => setSyncMessage(`Enviando... ${count} concluído(s)`));
+    setSyncBusy(false);
+    setSyncMessage("Pronto!");
+    setTimeout(dismiss, 2000);
   }
 
   if (!visible) return null;
@@ -104,7 +171,40 @@ export default function InstallPrompt() {
   return (
     <div className="fixed bottom-0 inset-x-0 z-40 p-3 sm:p-4">
       <div className="max-w-md mx-auto bg-white border border-slate-200 rounded-xl shadow-lg p-4">
-        {isIOS && showIOSSteps ? (
+        {askSync ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <LogoMark size={24} />
+              <p className="text-sm font-medium text-slate-900">App instalado! 🎉</p>
+            </div>
+            <p className="text-sm text-slate-600">
+              {isAutoSyncSupported()
+                ? "Quer autorizar o uso completo do armazenamento de fotos e vídeos agora? Você escolhe a pasta uma única vez e tudo nela passa a sincronizar sozinho, sem selecionar arquivo por arquivo."
+                : "Nesse navegador não é possível autorizar acesso completo automaticamente (limitação do iPhone/Safari) — você pode selecionar várias fotos e vídeos de uma vez para enviar agora."}
+            </p>
+            {syncMessage && <p className="text-xs text-blue-600">{syncMessage}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={dismiss} className="text-sm px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100">
+                Agora não
+              </button>
+              <button
+                onClick={handleAuthorizeSync}
+                disabled={syncBusy}
+                className="text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {syncBusy ? "Aguarde..." : isAutoSyncSupported() ? "Sim, autorizar" : "Selecionar fotos"}
+              </button>
+            </div>
+            <input
+              ref={fallbackInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFallbackFiles(e.target.files)}
+            />
+          </div>
+        ) : isIOS && showIOSSteps ? (
           <div className="space-y-3">
             <p className="text-sm font-medium text-slate-900">Instalar na tela de início</p>
             <ol className="text-sm text-slate-600 space-y-2 list-decimal list-inside">
@@ -120,14 +220,20 @@ export default function InstallPrompt() {
               </li>
             </ol>
             <div className="flex justify-end gap-2 pt-1">
-              <button onClick={dismiss} className="text-sm px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100">
+              <button
+                onClick={() => {
+                  setShowIOSSteps(false);
+                  setAskSync(true);
+                }}
+                className="text-sm px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100"
+              >
                 Entendi
               </button>
             </div>
           </div>
         ) : (
           <div className="flex items-center gap-3">
-            <span className="text-2xl">☁️</span>
+            <LogoMark size={32} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-900">Instale o Minha Nuvem</p>
               <p className="text-xs text-slate-500">Acesso rápido direto da tela inicial do seu celular.</p>

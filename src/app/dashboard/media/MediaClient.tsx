@@ -4,6 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { uploadFile } from "@/lib/upload";
 import Header from "@/components/Header";
+import {
+  isAutoSyncSupported,
+  getStoredHandle,
+  authorizeFolder,
+  forgetStoredHandle,
+  syncNow,
+  type SyncProgress,
+} from "@/lib/photoSync";
 
 type Profile = {
   id: string;
@@ -34,6 +42,10 @@ export default function MediaClient({ profile }: { profile: Profile }) {
   const [uploads, setUploads] = useState<UploadTask[]>([]);
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [autoSyncSupported, setAutoSyncSupported] = useState(false);
+  const [autoSyncAuthorized, setAutoSyncAuthorized] = useState(false);
+  const [syncState, setSyncState] = useState<SyncProgress | null>(null);
+  const [syncSummary, setSyncSummary] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -73,6 +85,49 @@ export default function MediaClient({ profile }: { profile: Profile }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     reload();
   }, [reload]);
+
+  const runSync = useCallback(async () => {
+    setSyncSummary(null);
+    setSyncState({ phase: "scanning", done: 0 });
+    const result = await syncNow((p) => setSyncState(p)).catch(() => null);
+    setSyncState(null);
+    if (result) {
+      setAutoSyncAuthorized(true);
+      setSyncSummary(
+        result.uploaded > 0
+          ? `${result.uploaded} ${result.uploaded === 1 ? "novo arquivo enviado" : "novos arquivos enviados"}.`
+          : "Tudo já estava sincronizado."
+      );
+      reload();
+    }
+    setTimeout(() => setSyncSummary(null), 6000);
+  }, [reload]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAutoSyncSupported(isAutoSyncSupported());
+    (async () => {
+      const handle = await getStoredHandle();
+      if (handle) {
+        setAutoSyncAuthorized(true);
+        runSync();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleAuthorizeAutoSync() {
+    const handle = await authorizeFolder();
+    if (!handle) return; // user cancelled the folder picker
+    setAutoSyncAuthorized(true);
+    runSync();
+  }
+
+  async function handleDisableAutoSync() {
+    if (!confirm("Desativar a sincronização automática? Você pode reativar quando quiser.")) return;
+    await forgetStoredHandle();
+    setAutoSyncAuthorized(false);
+  }
 
   async function handleFiles(fileList: FileList | File[]) {
     const list = Array.from(fileList).filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
@@ -151,11 +206,31 @@ export default function MediaClient({ profile }: { profile: Profile }) {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h1 className="text-lg font-semibold text-slate-900">📷 Fotos e vídeos</h1>
           <div className="flex gap-2">
+            {autoSyncSupported && autoSyncAuthorized ? (
+              <button
+                onClick={runSync}
+                disabled={!!syncState}
+                className="text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {syncState ? "Sincronizando..." : "Sincronizar agora"}
+              </button>
+            ) : autoSyncSupported ? (
+              <button
+                onClick={handleAuthorizeAutoSync}
+                className="text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Autorizar acesso completo
+              </button>
+            ) : null}
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              className={
+                autoSyncSupported
+                  ? "text-sm px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100"
+                  : "text-sm px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              }
             >
-              Adicionar do celular
+              {autoSyncSupported ? "Adicionar manualmente" : "Adicionar do celular"}
             </button>
             <input
               ref={fileInputRef}
@@ -167,6 +242,38 @@ export default function MediaClient({ profile }: { profile: Profile }) {
             />
           </div>
         </div>
+
+        {autoSyncSupported ? (
+          autoSyncAuthorized ? (
+            <p className="text-sm text-slate-500 mb-1">
+              Sincronização automática ativada — novas fotos e vídeos da pasta autorizada são enviados sem precisar
+              selecionar de novo.{" "}
+              <button onClick={handleDisableAutoSync} className="text-slate-400 hover:text-slate-600 underline">
+                Desativar
+              </button>
+            </p>
+          ) : (
+            <p className="text-sm text-slate-500 mb-1">
+              Toque em <strong>&quot;Autorizar acesso completo&quot;</strong> e escolha a pasta de fotos do celular
+              (ex.: Câmera/DCIM) uma única vez — a partir daí, tudo o que estiver nela é enviado automaticamente, sem
+              selecionar arquivo por arquivo.
+            </p>
+          )
+        ) : (
+          <p className="text-sm text-slate-500 mb-1">
+            Seu navegador (comum em iPhone) não permite sincronização automática completa — use &quot;Adicionar do
+            celular&quot; para escolher as fotos e vídeos.
+          </p>
+        )}
+
+        {syncState && (
+          <p className="text-xs text-blue-600 mb-3">
+            {syncState.phase === "scanning"
+              ? "Procurando arquivos novos..."
+              : `Enviando${syncState.current ? `: ${syncState.current}` : "..."}`}
+          </p>
+        )}
+        {syncSummary && <p className="text-xs text-green-600 mb-3">{syncSummary}</p>}
 
         <p className="text-sm text-slate-500 mb-4">
           Envie fotos e vídeos do seu celular (ou computador) e veja tudo aqui em um único lugar, como uma galeria.

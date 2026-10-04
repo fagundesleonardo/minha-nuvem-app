@@ -254,9 +254,9 @@ export default function MediaClient({ profile }: { profile: Profile }) {
             </p>
           ) : (
             <p className="text-sm text-slate-500 mb-1">
-              Toque em <strong>&quot;Autorizar acesso completo&quot;</strong> e escolha a pasta de fotos do celular
-              (ex.: Câmera/DCIM) uma única vez — a partir daí, tudo o que estiver nela é enviado automaticamente, sem
-              selecionar arquivo por arquivo.
+              Toque em <strong>&quot;Autorizar acesso completo&quot;</strong> uma única vez — o seletor já abre direto
+              na pasta de fotos do celular, é só confirmar. A partir daí, tudo o que estiver nela (fotos e vídeos,
+              inclusive os novos) é enviado automaticamente, para sempre, sem selecionar nada de novo.
             </p>
           )
         ) : (

@@ -98,15 +98,31 @@ export async function ensurePermission(handle: FileSystemDirectoryHandle): Promi
 }
 
 /**
- * Opens the native folder picker ONE time. The person picks their
- * camera/photos folder once; everything inside it (now and added later) is
+ * Opens the native folder picker ONE time, pre-focused on the device's
+ * Pictures/Camera folder (`startIn: "pictures"`) so the person doesn't have
+ * to navigate anywhere — they land straight on their photos and just
+ * confirm. That single confirmation is the only interaction this feature
+ * ever asks for: everything inside the folder (now and added later) is
  * then synced automatically, with no per-file selection, on every return
- * visit (subject to the browser's own permission re-confirmation).
+ * visit (subject to the browser's own permission re-confirmation, which is
+ * also automatic as long as the permission was already granted).
+ *
+ * A single user-initiated confirmation like this is unavoidable on the web
+ * — no browser (Chrome, Safari, Firefox) lets any website, installed or
+ * not, read local files without at least one explicit grant. That's a
+ * deliberate privacy boundary of the web platform itself, the same reason
+ * even native iOS/Android apps show a one-time "Allow access to Photos?"
+ * dialog. This function exists to make that one unavoidable step as close
+ * to zero-effort as possible.
  */
 export async function authorizeFolder(): Promise<FileSystemDirectoryHandle | null> {
   if (!isAutoSyncSupported()) return null;
   try {
-    const handle = await window.showDirectoryPicker!({ id: "minha-nuvem-camera", mode: "read" });
+    const handle = await window.showDirectoryPicker!({
+      id: "minha-nuvem-camera",
+      mode: "read",
+      startIn: "pictures",
+    });
     await idbSet(HANDLE_KEY, handle);
     return handle;
   } catch {

@@ -179,7 +179,7 @@ export default function InstallPrompt() {
             </div>
             <p className="text-sm text-slate-600">
               {isAutoSyncSupported()
-                ? "Quer autorizar o uso completo do armazenamento de fotos e vídeos agora? Você escolhe a pasta uma única vez e tudo nela passa a sincronizar sozinho, sem selecionar arquivo por arquivo."
+                ? "Toque em \"Sim, autorizar\" uma única vez — o seletor já abre direto na pasta de fotos do aparelho, é só confirmar. A partir daí, todas as fotos e vídeos (inclusive os novos) sincronizam sozinhos para sempre, sem você selecionar nada de novo."
                 : "Nesse navegador não é possível autorizar acesso completo automaticamente (limitação do iPhone/Safari) — você pode selecionar várias fotos e vídeos de uma vez para enviar agora."}
             </p>
             {syncMessage && <p className="text-xs text-blue-600">{syncMessage}</p>}
